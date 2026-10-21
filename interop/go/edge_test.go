@@ -2,6 +2,7 @@ package interop
 
 import (
 	"context"
+	"errors"
 	"html"
 	"io"
 	"net/http"
@@ -44,7 +45,12 @@ func postSAMLResponse(sp *saml.ServiceProvider, page []byte, ids []string) (*sam
 	post := httptest.NewRequest("POST", sp.AcsURL.String(), strings.NewReader(form.Encode()))
 	post.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	post.ParseForm()
-	return sp.ParseResponse(post, ids)
+	a, err := sp.ParseResponse(post, ids)
+	var ire *saml.InvalidResponseError
+	if errors.As(err, &ire) {
+		return nil, ire.PrivateErr
+	}
+	return a, err
 }
 
 func TestCrewjamIdPInitiated(t *testing.T) {

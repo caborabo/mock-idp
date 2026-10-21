@@ -22,21 +22,23 @@ type Simulations struct {
 	AuthError       string `json:"authError"`
 	TokenError      string `json:"tokenError"`
 
-	SAMLUnsigned          bool `json:"samlUnsigned"`
-	SAMLBadSignature      bool `json:"samlBadSignature"`
-	SAMLWrongCert         bool `json:"samlWrongCert"`
-	SAMLSHA1              bool `json:"samlSha1"`
-	SAMLSignatureWrapping bool `json:"samlSignatureWrapping"`
-	SAMLCommentInjection  bool `json:"samlCommentInjection"`
-	SAMLWrongIssuer       bool `json:"samlWrongIssuer"`
-	SAMLWrongAudience     bool `json:"samlWrongAudience"`
-	SAMLWrongDestination  bool `json:"samlWrongDestination"`
-	SAMLWrongRecipient    bool `json:"samlWrongRecipient"`
-	SAMLWrongInResponseTo bool `json:"samlWrongInResponseTo"`
-	SAMLExpired           bool `json:"samlExpired"`
-	SAMLNotYetValid       bool `json:"samlNotYetValid"`
-	SAMLMissingNameID     bool `json:"samlMissingNameId"`
-	SAMLNoAttributes      bool `json:"samlNoAttributes"`
+	SAMLUnsigned           bool `json:"samlUnsigned"`
+	SAMLBadSignature       bool `json:"samlBadSignature"`
+	SAMLWrongCert          bool `json:"samlWrongCert"`
+	SAMLSHA1               bool `json:"samlSha1"`
+	SAMLSignatureWrapping  bool `json:"samlSignatureWrapping"`
+	SAMLCommentInjection   bool `json:"samlCommentInjection"`
+	SAMLWrongIssuer        bool `json:"samlWrongIssuer"`
+	SAMLWrongAudience      bool `json:"samlWrongAudience"`
+	SAMLWrongDestination   bool `json:"samlWrongDestination"`
+	SAMLWrongRecipient     bool `json:"samlWrongRecipient"`
+	SAMLWrongInResponseTo  bool `json:"samlWrongInResponseTo"`
+	SAMLExpired            bool `json:"samlExpired"`
+	SAMLNotYetValid        bool `json:"samlNotYetValid"`
+	SAMLMissingNameID      bool `json:"samlMissingNameId"`
+	SAMLNoAttributes       bool `json:"samlNoAttributes"`
+	SAMLNotEncrypted       bool `json:"samlNotEncrypted"`
+	SAMLWrongEncryptionKey bool `json:"samlWrongEncryptionKey"`
 
 	OIDCExpired         bool `json:"oidcExpired"`
 	OIDCWrongIssuer     bool `json:"oidcWrongIssuer"`
@@ -95,6 +97,8 @@ var simCatalog = []simInfo{
 	sim("samlNotYetValid", "SAML", "bool", "Not yet valid", "NotBefore is 10 minutes in the future."),
 	sim("samlMissingNameId", "SAML", "bool", "No NameID", ""),
 	sim("samlNoAttributes", "SAML", "bool", "No attributes", "Send no AttributeStatement."),
+	sim("samlNotEncrypted", "SAML", "bool", "Plaintext despite encryption", "The app requires encrypted assertions; send this one in plaintext. The SP must refuse it."),
+	sim("samlWrongEncryptionKey", "SAML", "bool", "Encrypted to the wrong key", "Encrypt the assertion to a certificate that is not the SP's, as after the SP rotated its key."),
 	sim("oidcExpired", "OIDC", "bool", "Expired ID token", "exp is one hour in the past."),
 	sim("oidcWrongIssuer", "OIDC", "bool", "Wrong iss", ""),
 	sim("oidcWrongAudience", "OIDC", "bool", "Wrong aud", ""),

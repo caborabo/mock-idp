@@ -162,6 +162,9 @@ function overviewTab(t) {
     <div class="card"><h2>Signing certificate</h2><div class="kv">${kvc('SHA-256', ep.certificateSha256)}${kvc('SHA-1', ep.certificateSha1)}${kvc('kid', ep.kid)}</div>
       <div class="row" style="margin-top:12px"><a class="btn sm" href="${ep.certificateUrl}">Download PEM</a><button class="btn sm" data-act="copy" data-v="${ep.certificatePem}">Copy PEM</button><button class="btn sm danger" data-act="rotate">Rotate key</button></div>
       <p class="small muted" style="margin:8px 0 0">Rotating breaks apps that pinned the old certificate or cached the JWKS, as a real rotation does.</p></div>
+    <div class="card"><h2>Built-in test SP certificate</h2>
+      <p class="small muted" style="margin:0 0 10px">The test SP signs its AuthnRequests and decrypts assertions with this. Paste it into an app's encryption or signing certificate to try those features with the test SP.</p>
+      <button class="btn sm" data-act="copy" data-v="${S.spCert}">Copy PEM</button></div>
   </div>
   <div class="stack">
     <div class="card"><h2>How ${p.name} differs</h2><ul style="margin:0;padding-left:18px;line-height:1.7">${p.quirks.map(q => html`<li>${q}</li>`)}</ul></div>
@@ -203,9 +206,12 @@ function appsTab(t) {
     const signed = [a.signResponse && 'response', a.signAssertion && 'assertion'].filter(Boolean).join(' + ') || 'nothing';
     return html`<div class="card"><div class="row"><b class="grow">${a.name}</b><span class="chip">${a.type.toUpperCase()}</span></div>
       <div class="kv small" style="margin:10px 0">${a.type === 'saml'
-        ? [kvc('SP entity ID', a.entityId), kvc('ACS URL', a.acsUrl), kvc('Metadata', e.metadataUrl), kvc('NameID', `${(a.nameIdFormat || '').split(':').pop()} ← ${a.nameIdSource}`), kvc('Signed', signed)]
+        ? [kvc('SP entity ID', a.entityId), kvc('ACS URL', a.acsUrl), kvc('Metadata', e.metadataUrl), kvc('NameID', `${(a.nameIdFormat || '').split(':').pop()} ← ${a.nameIdSource}`), kvc('Signed', signed),
+           kvc('Encrypted', a.encryptAssertion ? `${a.encryptionAlg} + ${a.keyTransportAlg}` : 'no'),
+           kvc('Signed requests', a.requireSignedRequests ? 'required' : a.spSigningCert ? 'verified when signed' : 'not checked')]
         : [kvc('Client ID', a.clientId), a.public ? kvc('Client', 'public (no secret)') : kvc('Secret', a.clientSecret), kvc('Redirect URIs', (a.redirectUris || []).join(', ')), kvc('PKCE', a.requirePkce ? 'required' : 'optional')]}</div>
       <div class="row">${e.testLogin ? html`<a class="btn sm primary" href="${e.testLogin}" target="_blank" rel="noopener">Test login ↗</a>` : ''}
+        ${a.type === 'saml' && e.testLogin && e.testLogin.includes('/sp/saml/') && a.spSigningCert ? html`<a class="btn sm" href="${e.testLogin}?sign=0" target="_blank" rel="noopener" title="The test SP sends its AuthnRequest unsigned">Unsigned request ↗</a><a class="btn sm" href="${e.testLogin}?tamper=1" target="_blank" rel="noopener" title="The test SP breaks its request signature">Tampered request ↗</a>` : ''}
         ${a.type === 'oidc' ? html`<button class="btn sm" data-act="mint" data-id="${a.id}">Mint tokens</button>` : html`<button class="btn sm" data-act="mk-saml" data-id="${a.id}">Make SAMLResponse</button><a class="btn sm" href="${e.metadataUrl}?download">Metadata ↓</a>`}
         <button class="btn sm" data-act="app-edit" data-id="${a.id}">Edit</button><button class="btn sm danger" data-act="app-del" data-id="${a.id}">Delete</button></div></div>`;
   })}</div>`;
@@ -366,6 +372,7 @@ function field(f, v) {
       input = html`<select id="${id}" name="${f.k}">${f.options.map(o => { const [ov, ol] = Array.isArray(o) ? o : [o, o]; return html`<option value="${ov}"${attr(String(val ?? '') === String(ov), 'selected')}>${ol}</option>`; })}</select>`;
       break;
     case 'lines': input = html`<textarea id="${id}" name="${f.k}" rows="3">${(val || []).join('\n')}</textarea>`; break;
+    case 'textarea': input = html`<textarea id="${id}" name="${f.k}" rows="5" placeholder="${f.placeholder || ''}">${val || ''}</textarea>`; break;
     case 'kv': input = html`<textarea id="${id}" name="${f.k}" rows="3">${Object.entries(val || {}).map(([k, x]) => `${k}=${x}`).join('\n')}</textarea>`; break;
     case 'attrs': input = html`<textarea id="${id}" name="${f.k}" rows="6">${(val || []).map(a => `${a.name} = ${a.field}`).join('\n')}</textarea>`; break;
     case 'members':
@@ -485,6 +492,16 @@ function appForm(a) {
       { k: 'attrNameFormat', label: 'Attribute NameFormat', type: 'select', options: [['', '(omit)'], ['urn:oasis:names:tc:SAML:2.0:attrname-format:basic', 'basic'], ['urn:oasis:names:tc:SAML:2.0:attrname-format:uri', 'uri'], ['urn:oasis:names:tc:SAML:2.0:attrname-format:unspecified', 'unspecified']], when: saml },
       { k: 'issuer', label: 'IdP issuer override', when: saml, hint: `Empty uses ${p.name}'s format.` },
       { k: 'relayState', label: 'Default RelayState for IdP-initiated sign-in', when: saml },
+      { k: 'encryptAssertion', label: 'Encrypt assertions', type: 'bool', when: saml },
+      { k: 'spEncryptionCert', label: 'SP encryption certificate', type: 'textarea', when: v => saml(v) && v.encryptAssertion, placeholder: '-----BEGIN CERTIFICATE-----',
+        hint: 'PEM, bare base64, or paste the SP\'s whole metadata XML. For the built-in test SP, copy its certificate from Overview.' },
+      { k: 'encryptionAlg', label: 'Block cipher', type: 'select', when: v => saml(v) && v.encryptAssertion,
+        options: [['aes256-cbc', 'AES-256-CBC (Okta, Entra default)'], ['aes128-cbc', 'AES-128-CBC'], ['aes256-gcm', 'AES-256-GCM'], ['aes128-gcm', 'AES-128-GCM']] },
+      { k: 'keyTransportAlg', label: 'Key transport', type: 'select', when: v => saml(v) && v.encryptAssertion,
+        options: [['rsa-oaep', 'RSA-OAEP (recommended)'], ['rsa-1_5', 'RSA 1.5 (legacy)']] },
+      { k: 'spSigningCert', label: 'SP signing certificate (verifies signed AuthnRequests)', type: 'textarea', when: saml, placeholder: '-----BEGIN CERTIFICATE-----',
+        hint: 'Empty: signed requests are accepted without checking the signature. PEM, base64 or SP metadata.' },
+      { k: 'requireSignedRequests', label: 'Require signed AuthnRequests', type: 'bool', when: saml },
       { k: 'redirectUris', label: 'Redirect URIs', type: 'lines', when: oidc, hint: 'One per line. Matched exactly, as real IdPs do.' },
       { k: 'postLogoutRedirectUris', label: 'Post-logout redirect URIs', type: 'lines', when: oidc },
       { k: 'clientId', label: 'Client ID', when: oidc, hint: isNew ? `Empty generates one in ${p.name}'s format.` : '' },
@@ -560,7 +577,7 @@ const A = {
   'group-new': () => groupForm(),
   'group-edit': d => groupForm(S.t.groups.find(g => g.id === d.id)),
   'group-del': d => confirmDo('Delete this group?', async () => { await api('DELETE', tp('/groups/' + encodeURIComponent(d.id))); await refreshTenant(); }),
-  'app-new': d => appForm(d.type === 'saml' ? { type: 'saml', signResponse: false, signAssertion: false } : { type: 'oidc', redirectUris: ['http://localhost:3000/callback'] }),
+  'app-new': d => appForm(d.type === 'saml' ? { type: 'saml', signResponse: false, signAssertion: false, encryptionAlg: 'aes256-cbc', keyTransportAlg: 'rsa-oaep' } : { type: 'oidc', redirectUris: ['http://localhost:3000/callback'] }),
   'app-edit': d => appForm(S.t.apps.find(a => a.id === d.id)),
   'app-del': d => confirmDo('Delete this app?', async () => { await api('DELETE', tp('/apps/' + encodeURIComponent(d.id))); await refreshTenant(); }),
   mint: d => form({
@@ -689,7 +706,7 @@ function connect() {
 }
 
 (async function boot() {
-  [S.info, S.routes] = await Promise.all([api('GET', '/info'), api('GET', '')]);
+  [S.info, S.routes, { certificatePem: S.spCert }] = await Promise.all([api('GET', '/info'), api('GET', ''), api('GET', '/test-sp-certificate')]);
   await loadTenants();
   S.logs = await api('GET', '/logs?limit=1000');
   connect();

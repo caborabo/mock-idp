@@ -27,6 +27,20 @@ const (
 
 func samlID() string { return "_" + randHex(16) }
 
+func mustString(el *etree.Element) string {
+	d := etree.NewDocument()
+	d.SetRoot(el.Copy())
+	x, _ := d.WriteToString()
+	return x
+}
+
+func orDefault(v, def string) string {
+	if v == "" {
+		return def
+	}
+	return v
+}
+
 func (s *Server) samlApp(w http.ResponseWriter, r *http.Request) (*Tenant, *App) {
 	t := s.lookup(w, r, false)
 	if t == nil {
@@ -59,7 +73,7 @@ func (s *Server) samlMetadata(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Fprintf(w, `<?xml version="1.0" encoding="UTF-8"?>
 <md:EntityDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata" entityID="%s">
-  <md:IDPSSODescriptor WantAuthnRequestsSigned="false" protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol">
+  <md:IDPSSODescriptor WantAuthnRequestsSigned="%t" protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol">
     <md:KeyDescriptor use="signing">
       <ds:KeyInfo xmlns:ds="http://www.w3.org/2000/09/xmldsig#"><ds:X509Data><ds:X509Certificate>%s</ds:X509Certificate></ds:X509Data></ds:KeyInfo>
     </md:KeyDescriptor>
@@ -70,7 +84,7 @@ func (s *Server) samlMetadata(w http.ResponseWriter, r *http.Request) {
     <md:SingleSignOnService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST" Location="%s/sso"/>
   </md:IDPSSODescriptor>
 </md:EntityDescriptor>
-`, e(s.samlIssuer(t, app)), base64.StdEncoding.EncodeToString(t.cert.Raw), base, base, e(app.NameIDFormat), base, base)
+`, e(s.samlIssuer(t, app)), app.RequireSignedRequests, base64.StdEncoding.EncodeToString(t.cert.Raw), base, base, e(app.NameIDFormat), base, base)
 }
 
 // samlSSO receives an AuthnRequest (Redirect or POST binding) or, with no
@@ -114,8 +128,9 @@ func (s *Server) samlSSO(w http.ResponseWriter, r *http.Request) {
 		if acs := req.SelectAttrValue("AssertionConsumerServiceURL", ""); acs != "" && acs != app.ACSURL {
 			e.warn("AuthnRequest asks for ACS %s but the app is set to %s. Using the configured ACS, as Okta and Entra do.", acs, app.ACSURL)
 		}
-		if find(req, "Signature") == nil && r.Form.Get("Signature") == "" {
-			e.note("AuthnRequest is unsigned (accepted; this IdP does not require signed requests)")
+		if msg := s.checkRequestSignature(r, req, app); msg != "" {
+			s.errorPage(w, r, t, 400, "AuthnRequest rejected", msg)
+			return
 		}
 	} else {
 		e.Summary = "SAML IdP-initiated sign-in to " + app.Name
@@ -129,6 +144,50 @@ func (s *Server) samlSSO(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.beginLogin(w, r, t, in)
+}
+
+// checkRequestSignature verifies a signed AuthnRequest against the SP's
+// signing certificate, in either binding. It returns why the request must be
+// refused, or "" to go on. Unsigned requests pass unless the app requires
+// signing, as with Okta and Entra.
+func (s *Server) checkRequestSignature(r *http.Request, req *etree.Element, app *App) string {
+	e := entry(r)
+	redirect := r.Method == http.MethodGet && r.URL.Query().Get("Signature") != ""
+	xmlSig := child(req, "Signature") != nil
+	if !redirect && !xmlSig {
+		if app.RequireSignedRequests {
+			return "This app requires signed AuthnRequests and this one is unsigned. Configure the SP to sign its requests, or turn off \"Require signed requests\" on the app."
+		}
+		e.note("AuthnRequest is unsigned (accepted: the app does not require signed requests)")
+		return ""
+	}
+	if app.SPSigningCert == "" {
+		e.warn("AuthnRequest is signed, but the app has no SP signing certificate, so the signature was not checked")
+		return ""
+	}
+	cert, err := parseSPCert(app.SPSigningCert, "signing")
+	if err != nil {
+		return "The app's SP signing certificate cannot be read: " + err.Error()
+	}
+	binding := "HTTP-POST"
+	var alg string
+	if redirect {
+		binding = "HTTP-Redirect"
+		alg, err = verifyRedirectSignature(r.URL.RawQuery, cert)
+	} else {
+		if m := find(req, "SignatureMethod"); m != nil {
+			alg = m.SelectAttrValue("Algorithm", "")
+		}
+		err = validateSig(req, cert)
+	}
+	if err != nil {
+		return fmt.Sprintf("The AuthnRequest signature (%s binding) is invalid: %v. Check that the SP signs with the certificate configured on this app.", binding, err)
+	}
+	if strings.Contains(alg, "sha1") {
+		e.warn("AuthnRequest signed with rsa-sha1, which is weak; accepted")
+	}
+	e.note("AuthnRequest signature verified (%s binding, %s)", binding, alg[strings.LastIndex(alg, "#")+1:])
+	return ""
 }
 
 func (s *Server) samlComplete(w http.ResponseWriter, r *http.Request, t *Tenant, app *App, in *interaction, u *User, errCode string) {
@@ -398,14 +457,27 @@ func (s *Server) samlResponse(t *Tenant, app *App, u *User, inResponseTo, errCod
 			return "", err
 		}
 	}
-	resp.AddChild(as)
-	if sign && app.SignResponse {
-		if err := signEl(resp, key, cert, sha1); err != nil {
-			return "", err
+	// tamper applies the faults that change the signed assertion.
+	tamper := func() {
+		if nid := find(as, "NameID"); nid != nil && sims.SAMLCommentInjection {
+			// Comments are not part of the signed bytes, so the signature stays valid.
+			nid.SetText(nameIDValue(app, u))
+			nid.CreateComment("mock-idp")
+			nid.CreateText(".evil.example")
+			e.warn("simulation: NameID is %s<!--mock-idp-->.evil.example; the signature still verifies", nameIDValue(app, u))
+		}
+		if sims.SAMLBadSignature {
+			if nid := find(as, "NameID"); nid != nil {
+				nid.SetText("attacker@evil.example")
+			} else {
+				find(as, "Audience").SetText("tampered")
+			}
+			e.warn("simulation: NameID changed to attacker@evil.example after signing")
 		}
 	}
+	var evil *etree.Element
 	if sims.SAMLSignatureWrapping {
-		evil := as.Copy()
+		evil = as.Copy()
 		if sig := child(evil, "Signature"); sig != nil {
 			evil.RemoveChild(sig)
 		}
@@ -414,23 +486,42 @@ func (s *Server) samlResponse(t *Tenant, app *App, u *User, inResponseTo, errCod
 		if nid := find(evil, "NameID"); nid != nil {
 			nid.SetText("attacker@evil.example")
 		}
-		resp.InsertChildAt(as.Index(), evil) // after signing: an attacker cannot re-sign
+	}
+
+	encrypt := app.EncryptAssertion
+	if encrypt && sims.SAMLNotEncrypted {
+		encrypt = false
+		e.warn("simulation: the app requires encryption, but the assertion is sent in plaintext")
+	}
+	top := as
+	if encrypt {
+		tamper() // before sealing: afterwards the IdP cannot see inside
+		encCert, err := parseSPCert(app.SPEncryptionCert, "encryption")
+		if err != nil {
+			return "", fmt.Errorf("SP encryption certificate: %w", err)
+		}
+		if sims.SAMLWrongEncryptionKey {
+			encCert = t.cert2
+			e.warn("simulation: assertion encrypted to a certificate that is not the SP's")
+		}
+		if top, err = encryptAssertion(as, encCert, app.EncryptionAlg, app.KeyTransportAlg); err != nil {
+			return "", err
+		}
+		e.decode("Assertion (before encryption)", "xml", prettyXML(mustString(as)))
+		e.note("assertion encrypted: %s + %s", orDefault(app.EncryptionAlg, "aes256-cbc"), orDefault(app.KeyTransportAlg, "rsa-oaep"))
+	}
+	resp.AddChild(top)
+	if sign && app.SignResponse {
+		if err := signEl(resp, key, cert, sha1); err != nil {
+			return "", err
+		}
+	}
+	if evil != nil {
+		resp.InsertChildAt(top.Index(), evil) // after signing: an attacker cannot re-sign
 		e.warn("simulation: signature wrapping, a forged unsigned assertion for attacker@evil.example comes first")
 	}
-	if nid := find(as, "NameID"); nid != nil && sims.SAMLCommentInjection {
-		// Comments are not part of the signed bytes, so the signature stays valid.
-		nid.SetText(nameIDValue(app, u))
-		nid.CreateComment("mock-idp")
-		nid.CreateText(".evil.example")
-		e.warn("simulation: NameID is %s<!--mock-idp-->.evil.example; the signature still verifies", nameIDValue(app, u))
-	}
-	if sims.SAMLBadSignature {
-		if nid := find(as, "NameID"); nid != nil {
-			nid.SetText("attacker@evil.example")
-		} else {
-			find(as, "Audience").SetText("tampered")
-		}
-		e.warn("simulation: NameID changed to attacker@evil.example after signing")
+	if !encrypt {
+		tamper() // after all signing, so it breaks every signature that covers it
 	}
 	if sign {
 		e.note("signed: response=%v assertion=%v alg=%s", app.SignResponse, app.SignAssertion, map[bool]string{true: "rsa-sha1", false: "rsa-sha256"}[sha1])

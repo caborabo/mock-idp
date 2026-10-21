@@ -27,16 +27,22 @@ type Store struct {
 	mu      sync.Mutex
 	path    string
 	Tenants []*Tenant `json:"tenants"`
+
+	// The built-in test SP's key pair: it signs the test SP's AuthnRequests
+	// and decrypts encrypted assertions sent to it.
+	SPKeyPEM  string `json:"spKeyPem"`
+	SPCertPEM string `json:"spCertPem"`
+	spKey     *rsa.PrivateKey
 }
 
 func loadStore(path string) (*Store, error) {
 	s := &Store{path: path}
 	if path == "" {
-		return s, nil
+		return s, s.ensureSPKey()
 	}
 	b, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
-		return s, nil
+		return s, s.ensureSPKey()
 	}
 	if err != nil {
 		return nil, err
@@ -49,7 +55,19 @@ func loadStore(path string) (*Store, error) {
 			return nil, fmt.Errorf("tenant %s: %w", t.ID, err)
 		}
 	}
-	return s, nil
+	return s, s.ensureSPKey()
+}
+
+func (s *Store) ensureSPKey() error {
+	if s.SPKeyPEM == "" {
+		var err error
+		if s.SPKeyPEM, s.SPCertPEM, err = newKeyPair("mock-idp built-in test SP"); err != nil {
+			return err
+		}
+	}
+	var err error
+	s.spKey, err = parseKey(s.SPKeyPEM)
+	return err
 }
 
 // save writes the state file. Callers hold mu.
@@ -140,6 +158,13 @@ type App struct {
 	Attributes     []AttrMapping `json:"attributes,omitempty"`
 	AttrNameFormat string        `json:"attrNameFormat,omitempty"`
 	RelayState     string        `json:"relayState,omitempty"`
+
+	EncryptAssertion      bool   `json:"encryptAssertion"`
+	SPEncryptionCert      string `json:"spEncryptionCert,omitempty"` // PEM, base64 DER, or the SP's metadata XML
+	EncryptionAlg         string `json:"encryptionAlg,omitempty"`    // aes128-cbc | aes256-cbc | aes128-gcm | aes256-gcm
+	KeyTransportAlg       string `json:"keyTransportAlg,omitempty"`  // rsa-oaep | rsa-1_5
+	SPSigningCert         string `json:"spSigningCert,omitempty"`    // verifies signed AuthnRequests
+	RequireSignedRequests bool   `json:"requireSignedRequests"`
 
 	ClientID       string   `json:"clientId,omitempty"`
 	ClientSecret   string   `json:"clientSecret,omitempty"`
@@ -446,7 +471,8 @@ func (s *Server) seedTenant(t *Tenant) {
 	t.Groups = []*Group{g("Everyone", all...), g("Engineering", alice.ID, bob.ID), g("Admins", alice.ID), g("Sales", dave.ID)}
 
 	samlApp := &App{ID: "test-saml", Name: "Built-in test SP (SAML)", Type: "saml",
-		EntityID: s.base + "/sp/saml/" + t.ID + "/test-saml", ACSURL: s.base + "/sp/saml/" + t.ID + "/test-saml/acs"}
+		EntityID: s.base + "/sp/saml/" + t.ID + "/test-saml", ACSURL: s.base + "/sp/saml/" + t.ID + "/test-saml/acs",
+		SPSigningCert: s.store.SPCertPEM, SPEncryptionCert: s.store.SPCertPEM}
 	oidcApp := &App{ID: "test-oidc", Name: "Built-in test app (OIDC)", Type: "oidc", GroupsClaim: true,
 		RedirectURIs:   []string{s.base + "/sp/oidc/" + t.ID + "/test-oidc/callback"},
 		PostLogoutURIs: []string{s.base + "/"}}
@@ -475,6 +501,12 @@ func applyAppDefaults(t *Tenant, a *App) {
 		}
 		if a.SigAlg == "" {
 			a.SigAlg = "sha256"
+		}
+		if a.EncryptionAlg == "" {
+			a.EncryptionAlg = "aes256-cbc"
+		}
+		if a.KeyTransportAlg == "" {
+			a.KeyTransportAlg = "rsa-oaep"
 		}
 		return
 	}

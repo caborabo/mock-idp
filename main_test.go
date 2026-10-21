@@ -329,3 +329,59 @@ func TestBrowsersCannotDriveTheAPI(t *testing.T) {
 		t.Errorf("MCP tool call blocked: %s", rec.Body.String())
 	}
 }
+
+func TestEncryptedAssertions(t *testing.T) {
+	s, ts := newTestServer(t)
+	call(t, ts, "PATCH", "/api/tenants/okta/simulations", map[string]any{"autoLogin": "alice@acme.example"})
+	login := ts.URL + "/sp/saml/okta/test-saml/login"
+	for _, alg := range []string{"aes128-cbc", "aes256-cbc", "aes128-gcm", "aes256-gcm"} {
+		for _, kt := range []string{"rsa-oaep", "rsa-1_5"} {
+			call(t, ts, "PATCH", "/api/tenants/okta/apps/test-saml", map[string]any{"encryptAssertion": true, "encryptionAlg": alg, "keyTransportAlg": kt})
+			page := browse(t, login)
+			if !strings.Contains(page, "✓</span> Signed in") || !strings.Contains(page, "Decrypt assertion") {
+				t.Errorf("%s + %s: not signed in through decryption:\n%s", alg, kt, page)
+			}
+		}
+	}
+	// the SP's metadata works in place of a PEM
+	md := `<md:EntityDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata"><md:SPSSODescriptor><md:KeyDescriptor use="encryption"><ds:KeyInfo xmlns:ds="http://www.w3.org/2000/09/xmldsig#"><ds:X509Data><ds:X509Certificate>` +
+		strings.Join(strings.Split(strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(s.store.SPCertPEM), "-----BEGIN CERTIFICATE-----"), "-----END CERTIFICATE-----")), "\n"), "") +
+		`</ds:X509Certificate></ds:X509Data></ds:KeyInfo></md:KeyDescriptor></md:SPSSODescriptor></md:EntityDescriptor>`
+	call(t, ts, "PATCH", "/api/tenants/okta/apps/test-saml", map[string]any{"spEncryptionCert": md, "encryptionAlg": "aes256-gcm"})
+	if page := browse(t, login); !strings.Contains(page, "✓</span> Signed in") {
+		t.Errorf("SP metadata as the encryption cert: not signed in")
+	}
+	// faults must still be caught when they hide inside the encryption
+	for _, sim := range []string{"samlWrongEncryptionKey", "samlNotEncrypted", "samlBadSignature", "samlSignatureWrapping", "samlCommentInjection", "samlExpired"} {
+		call(t, ts, "PATCH", "/api/tenants/okta/simulations", map[string]any{sim: true, "once": true})
+		if page := browse(t, login); !strings.Contains(page, "Rejected") {
+			t.Errorf("%s with encryption was accepted", sim)
+		}
+	}
+}
+
+func TestSignedAuthnRequests(t *testing.T) {
+	_, ts := newTestServer(t)
+	call(t, ts, "PATCH", "/api/tenants/okta/simulations", map[string]any{"autoLogin": "alice@acme.example"})
+	call(t, ts, "PATCH", "/api/tenants/okta/apps/test-saml", map[string]any{"requireSignedRequests": true})
+	login := ts.URL + "/sp/saml/okta/test-saml/login"
+	if page := browse(t, login); !strings.Contains(page, "✓</span> Signed in") {
+		t.Fatalf("signed request refused:\n%s", page)
+	}
+	if page := browse(t, login+"?sign=0"); !strings.Contains(page, "requires signed AuthnRequests") {
+		t.Errorf("unsigned request accepted though the app requires signing")
+	}
+	if page := browse(t, login+"?tamper=1"); !strings.Contains(page, "signature (HTTP-Redirect binding) is invalid") {
+		t.Errorf("tampered signature accepted")
+	}
+	resp, _ := http.Get(ts.URL + "/t/okta/saml/test-saml/metadata")
+	b, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(b), `WantAuthnRequestsSigned="true"`) {
+		t.Errorf("metadata does not advertise WantAuthnRequestsSigned")
+	}
+	// without "require", an unsigned request still works, as with Okta and Entra
+	call(t, ts, "PATCH", "/api/tenants/okta/apps/test-saml", map[string]any{"requireSignedRequests": false})
+	if page := browse(t, login+"?sign=0"); !strings.Contains(page, "✓</span> Signed in") {
+		t.Errorf("unsigned request refused though signing is optional")
+	}
+}

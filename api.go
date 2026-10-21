@@ -174,6 +174,12 @@ func (s *Server) registerAPI() {
 		writeJSON(w, 200, s.routes)
 	})
 	s.api("GET", "/api/info", "get_info", "Server facts: base URL, the providers and their quirks, the simulation catalogue and presets. Read this first.", nil, s.apiInfo)
+	s.api("GET", "/api/test-sp-certificate", "get_test_sp_certificate", "The built-in test SP's certificate. Its apps already use it; paste it as spEncryptionCert / spSigningCert to use encryption or signed requests with the built-in test SP.", nil, func(w http.ResponseWriter, r *http.Request) {
+		s.store.mu.Lock()
+		pemText := s.store.SPCertPEM
+		s.store.mu.Unlock()
+		writeJSON(w, 200, map[string]string{"certificatePem": pemText})
+	})
 	s.api("GET", "/api/tenants", "list_tenants", "List simulated identity providers (tenants) with counts and active simulations.", nil, s.listTenants)
 	s.api("POST", "/api/tenants", "create_tenant", "Create a simulated IdP. provider is a key from get_info. seed adds sample users, groups and two test apps.",
 		map[string]any{"name": "Acme", "provider": "okta", "domain": "acme.example", "seed": true}, s.createTenant)
@@ -685,6 +691,24 @@ func validateApp(a *App) error {
 	case "saml":
 		if a.EntityID == "" || a.ACSURL == "" {
 			return errf(400, "a SAML app needs entityId and acsUrl")
+		}
+		if a.EncryptAssertion {
+			if _, err := parseSPCert(a.SPEncryptionCert, "encryption"); err != nil {
+				return errf(400, "encryptAssertion needs spEncryptionCert (PEM, base64 or SP metadata): %v", err)
+			}
+		}
+		if a.EncryptionAlg != "" && blockAlgs[a.EncryptionAlg] == "" {
+			return errf(400, "encryptionAlg must be aes128-cbc, aes256-cbc, aes128-gcm or aes256-gcm")
+		}
+		if a.KeyTransportAlg != "" && keyTransportAlgs[a.KeyTransportAlg] == "" {
+			return errf(400, "keyTransportAlg must be rsa-oaep or rsa-1_5")
+		}
+		if a.SPSigningCert != "" {
+			if _, err := parseSPCert(a.SPSigningCert, "signing"); err != nil {
+				return errf(400, "spSigningCert: %v", err)
+			}
+		} else if a.RequireSignedRequests {
+			return errf(400, "requireSignedRequests needs spSigningCert, to verify the signatures with")
 		}
 	case "oidc":
 		if len(a.RedirectURIs) == 0 {

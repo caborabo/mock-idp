@@ -90,12 +90,26 @@ func (s *Server) spSAMLLogin(w http.ResponseWriter, r *http.Request) {
 		nsProtocol, nsAssertion, id, time.Now().UTC().Format(samlTime), sso, app.ACSURL, force, app.EntityID, app.NameIDFormat)
 	e.Summary = "test SP sends AuthnRequest " + id
 	e.decode("AuthnRequest", "xml", prettyXML(req))
-	http.Redirect(w, r, sso+"?"+url.Values{"SAMLRequest": {deflateB64(req)}, "RelayState": {"mock-idp-test"}}.Encode(), http.StatusFound)
+	q := "SAMLRequest=" + url.QueryEscape(deflateB64(req)) + "&RelayState=mock-idp-test"
+	// Sign when the app trusts this test SP's certificate. ?sign=0 sends it
+	// unsigned and ?tamper=1 breaks the signature, to see the IdP refuse them.
+	if sameCert(app.SPSigningCert, s.store.SPCertPEM) && r.URL.Query().Get("sign") != "0" {
+		q = signRedirect(q, s.store.spKey)
+		if r.URL.Query().Has("tamper") {
+			q = strings.Replace(q, "&Signature=", "&Signature=AAAA", 1)
+			e.warn("test SP: signature deliberately broken (?tamper)")
+		} else {
+			e.note("test SP: AuthnRequest signed (HTTP-Redirect, rsa-sha256)")
+		}
+	}
+	http.Redirect(w, r, sso+"?"+q, http.StatusFound)
 }
 
 type samlExpect struct {
 	issuer, audience, acs, tenant, app string
 	cert                               *x509.Certificate
+	spKey                              *rsa.PrivateKey // decrypts EncryptedAssertion
+	encrypted                          bool            // the app requires encryption
 }
 
 func validateSig(el *etree.Element, cert *x509.Certificate) error {
@@ -133,6 +147,27 @@ func (s *Server) checkSAMLResponse(x string, want samlExpect) (checks, [][2]stri
 	c.add("Response Destination", resp.SelectAttrValue("Destination", "") == want.acs, "got %q, want %q", resp.SelectAttrValue("Destination", ""), want.acs)
 	c.add("Response Issuer", text(child(resp, "Issuer")) == want.issuer, "got %q, want %q", text(child(resp, "Issuer")), want.issuer)
 
+	// The response signature covers the encrypted form, so check it before
+	// decrypting changes the tree.
+	var respSigErr error
+	if child(resp, "Signature") != nil {
+		respSigErr = validateSig(resp, want.cert)
+	}
+	encs := children(resp, "EncryptedAssertion")
+	for _, ea := range encs {
+		dec, desc, err := decryptAssertion(ea, want.spKey)
+		if err != nil {
+			c.add("Decrypt assertion", false, "%s: %v", desc, err)
+			return c, nil
+		}
+		c.add("Decrypt assertion", true, "%s, with the SP's private key", desc)
+		resp.InsertChildAt(ea.Index(), dec)
+		resp.RemoveChild(ea)
+	}
+	if want.encrypted && len(encs) == 0 {
+		c.add("Assertion encrypted", false, "the app requires encrypted assertions, but this one arrived in plaintext: anyone who sees the response can read it")
+	}
+
 	asserts := children(resp, "Assertion")
 	if len(asserts) == 0 {
 		c.add("Assertion", false, "no Assertion (encrypted assertions are not supported by the test SP)")
@@ -145,7 +180,7 @@ func (s *Server) checkSAMLResponse(x string, want samlExpect) (checks, [][2]stri
 
 	sigs := 0
 	if child(resp, "Signature") != nil {
-		err := validateSig(resp, want.cert)
+		err := respSigErr
 		c.add("Response signature", err == nil, "%s", errOr(err, "valid, signed with the metadata certificate"))
 		if err == nil {
 			sigs++
@@ -249,7 +284,8 @@ func (s *Server) spSAMLACS(w http.ResponseWriter, r *http.Request) {
 		s.store.mu.Unlock()
 		return
 	}
-	want := samlExpect{issuer: s.samlIssuer(t, app), audience: app.EntityID, acs: app.ACSURL, tenant: t.ID, app: app.ID, cert: t.cert}
+	want := samlExpect{issuer: s.samlIssuer(t, app), audience: app.EntityID, acs: app.ACSURL, tenant: t.ID, app: app.ID, cert: t.cert,
+		spKey: s.store.spKey, encrypted: app.EncryptAssertion}
 	s.store.mu.Unlock()
 
 	x, err := decodeSAMLMessage(r.Form.Get("SAMLResponse"))

@@ -14,9 +14,11 @@ Built by [SSOJet](https://ssojet.com/?utm_source=github&utm_medium=mock-idp). Wh
 
 - **9 providers, with their quirks.** Okta, Microsoft Entra ID, Google Workspace, OneLogin, PingOne, JumpCloud, AD FS, Auth0, Keycloak, plus a plain generic one. Each has its own id formats, issuer format, claim shapes, SAML attribute names and SCIM client dialect. Entra's pairwise `sub`, missing `email` and `#EXT#` guests. Okta's PUT-only SCIM updates. Google's empty SAML attributes.
 - **SAML 2.0 IdP.** Metadata, SP- and IdP-initiated SSO (Redirect and POST bindings), SLO, signed response and/or assertion.
+- **Encrypted assertions.** AES-128/256 in CBC or GCM, RSA-OAEP or RSA 1.5 key transport, signed then encrypted. Paste the SP's certificate or its whole metadata.
+- **Signed AuthnRequests.** Verified in both bindings against the SP's signing certificate; optionally required, and advertised in the metadata.
 - **OIDC provider.** Discovery, JWKS, authorization code + PKCE, implicit, refresh tokens, client credentials, password grant, userinfo, logout.
 - **SCIM client.** Provisions users and groups into *your* app as Okta or Entra would. Auto-push on change, full sync, and a conformance suite.
-- **38 simulations.** Expired assertions, clock skew, wrong audience, tampered signatures, unknown signing key, SHA-1, signature wrapping (XSW), comment injection in NameID, alg=none, wrong nonce/state/at_hash, missing email, MFA, consent, lockout, outages, latency. One click, or one API call. `once` clears them after the next sign-in.
+- **40 simulations.** Expired assertions, clock skew, wrong audience, tampered signatures, unknown signing key, SHA-1, signature wrapping (XSW), comment injection in NameID, plaintext or wrongly encrypted assertions, alg=none, wrong nonce/state/at_hash, missing email, MFA, consent, lockout, outages, latency. One click, or one API call. `once` clears them after the next sign-in.
 - **Built-in test SP and RP.** Press *Test login* and a careful app signs in through the real flow and shows every check it ran. No app needed to see a fault land.
 - **Live logs.** Every request and response, with SAML and JWTs decoded and notes on what the IdP decided and why.
 - **API and MCP.** Everything the dashboard does is a JSON call, and every call is an MCP tool, so an AI agent can set up tenants, inject faults and read the logs.
@@ -95,6 +97,7 @@ It prints a fault matrix of what each library catches. Things it found:
 - No library tested rejects SHA-1 signatures, a missing NameID, or a missing email claim. Your app has to.
 - `openid-client` refetches the JWKS on an unknown `kid` at most once a minute, so for up to 60 s after a key rotation a long-lived client fails. `go-oidc` refetches at once.
 - `node-saml` cannot check `InResponseTo` on a logout reply sent by POST; use the Redirect binding (mock-idp answers in the binding the request used).
+- `crewjam/saml` 0.5 cannot decrypt AES-256-GCM (only AES-128-GCM and CBC). `node-saml` decrypts all eight cipher and key-transport combinations.
 
 Edge cases covered too: IdP-initiated SSO, POST-binding requests, single logout in both bindings, RelayState, ForceAuthn, the IdP session and `prompt=none`, `form_post`, implicit flow, `client_secret_post`, client credentials, logout redirects, single-use codes, PKCE mismatch, key rotation, non-ASCII and guest names, parallel sign-ins across tenants, and latency.
 
@@ -104,6 +107,6 @@ Run against the Docker container: `MOCKIDP_URL=http://localhost:7070 interop/run
 
 ## Not yet
 
-Encrypted assertions, signed AuthnRequest verification, inbound SCIM (the IdP as a SCIM server), WS-Fed. Open an issue if you need one.
+Inbound SCIM (the IdP as a SCIM server), WS-Fed. Open an issue if you need one.
 
 This is a test tool. Never point production at it.
