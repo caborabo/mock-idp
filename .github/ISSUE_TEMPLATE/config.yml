@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/ssojet/mock-idp/security/advisories/new
+    about: Report privately. Don't open a public issue.
+  - name: Enterprise SSO and SCIM in production
+    url: https://ssojet.com/?utm_source=github&utm_medium=mock-idp-issues
+    about: mock-idp is for tests. SSOJet runs it for real.

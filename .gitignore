@@ -5,3 +5,4 @@ interop/node/node_modules/
 .gstack/
 .DS_Store
 interop/agent/results.json
+.serena/

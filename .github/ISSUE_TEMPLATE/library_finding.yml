@@ -1,0 +1,25 @@
+name: Library finding
+description: A client library accepted something it should reject
+labels: [library-finding]
+body:
+  - type: input
+    id: lib
+    attributes:
+      label: Library and version
+      placeholder: openid-client 6.8.8
+    validations:
+      required: true
+  - type: input
+    id: fault
+    attributes:
+      label: Simulation key
+      placeholder: oidcBadSignature
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: Library config and the result. A minimal script helps most.
+    validations:
+      required: true

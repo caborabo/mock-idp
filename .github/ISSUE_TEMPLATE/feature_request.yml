@@ -1,0 +1,19 @@
+name: Feature or fault request
+description: A new provider quirk, fault, protocol feature or dashboard idea
+labels: [enhancement]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What do you want to test that you can't today?
+    validations:
+      required: true
+  - type: textarea
+    id: real
+    attributes:
+      label: How does the real provider behave?
+      description: For quirks, link the vendor docs or describe what you saw.
+  - type: textarea
+    id: app
+    attributes:
+      label: What should a careful app do when it sees this?

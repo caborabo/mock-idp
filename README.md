@@ -8,6 +8,7 @@
   <img src="https://img.shields.io/badge/go-1.24-00ADD8?logo=go&logoColor=white" alt="Go 1.24">
   <img src="https://img.shields.io/badge/MCP-ready-7c3aed" alt="MCP ready">
   <img src="https://img.shields.io/badge/arch-amd64%20%7C%20arm64-64748b" alt="amd64 and arm64">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-22c55e" alt="MIT license"></a>
 </p>
 
 <p align="center">
@@ -313,6 +314,14 @@ Inbound SCIM (the IdP as a SCIM server) and WS-Fed. Open an issue if you need on
 
 > [!CAUTION]
 > This is a test tool. Never point production at it.
+
+## 🤝 Contributing
+
+New provider quirks, new faults and library findings are very welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md). Found a security problem? See [SECURITY.md](SECURITY.md).
+
+## 📄 License
+
+[MIT](LICENSE)
 
 ---
 

@@ -1,0 +1,35 @@
+name: Bug report
+description: mock-idp did something wrong
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: How to reproduce
+      description: Tenant, provider, app, simulations turned on, and the steps or curl commands.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Live log entry
+      description: Export it from Live logs, or paste the relevant request and response. Remove anything private.
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Image tag or commit, e.g. ghcr.io/ssojet/mock-idp:latest or 7a11e16
+    validations:
+      required: true
+  - type: dropdown
+    id: run
+    attributes:
+      label: How do you run it?
+      options: [Docker, go run / binary, Other]
