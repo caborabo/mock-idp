@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>mock-idp</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%234f46e5'/><path d='M10 16l4 4 8-9' stroke='white' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div class="shell">
+  <aside class="side">
+    <a class="logo" href="#/"><span class="mark"></span><span>mock-idp</span></a>
+    <nav>
+      <a href="#/" data-nav="">Tenants</a>
+      <a href="#/logs" data-nav="logs">Live logs <span class="live" id="live-dot"></span></a>
+      <a href="#/decoder" data-nav="decoder">Decoder</a>
+      <a href="#/api" data-nav="api">API &amp; MCP</a>
+    </nav>
+    <div class="side-label">Identity providers</div>
+    <div id="side-tenants" class="side-tenants"></div>
+    <a class="cta" href="https://ssojet.com/?utm_source=mock-idp&amp;utm_medium=dashboard" target="_blank" rel="noopener">
+      <b>Tests pass?</b> Ship enterprise SSO and SCIM for real with SSOJet →
+    </a>
+  </aside>
+  <main id="main"></main>
+</div>
+<dialog id="dlg"></dialog>
+<div id="toast" role="status"></div>
+<script src="app.js"></script>
+</body>
+</html>

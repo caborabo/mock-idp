@@ -1,0 +1,13 @@
+{
+  "name": "mock-idp-interop",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "@node-saml/node-saml": "5.1.0",
+    "openid-client": "6.8.8"
+  }
+}

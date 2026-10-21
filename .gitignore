@@ -1,0 +1,7 @@
+mockidp-data.json
+mockidp-data.json.tmp
+/mock-idp
+interop/node/node_modules/
+.gstack/
+.DS_Store
+interop/agent/results.json
