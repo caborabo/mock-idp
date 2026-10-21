@@ -1,9 +1,11 @@
-FROM golang:1.25-alpine AS build
+# Cross-compile on the build machine for each target, instead of emulating it.
+FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS build
+ARG TARGETOS TARGETARCH
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /mock-idp . && mkdir /data
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w" -o /mock-idp . && mkdir /data
 
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /mock-idp /mock-idp
