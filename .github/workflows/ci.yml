@@ -43,7 +43,7 @@ jobs:
         run: interop/platform.sh
 
   image:
-    name: Publish image to GHCR
+    name: Publish image to GHCR and Docker Hub
     needs: [test, platform]
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
@@ -83,3 +83,12 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - name: Docker Hub description from the README
+        if: github.ref == 'refs/heads/main'
+        uses: peter-evans/dockerhub-description@v5
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ssojethq/mock-idp
+          short-description: Okta, Entra ID, Google and 6 more IdPs on your laptop. SAML, OIDC, SCIM, 40 faults.
+          enable-url-completion: true

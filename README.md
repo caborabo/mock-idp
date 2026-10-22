@@ -33,6 +33,8 @@
 docker run -p 7070:7070 ghcr.io/ssojet/mock-idp
 ```
 
+Same image on Docker Hub: `ssojethq/mock-idp`.
+
 Open **http://localhost:7070**. Nine demo companies are already there, each with users, groups and two test apps.
 
 > [!TIP]
