@@ -85,12 +85,19 @@ jobs:
           cache-to: type=gha,mode=max
       - name: README for Docker Hub
         if: github.ref == 'refs/heads/main'
-        # Docker Hub only completes Markdown image links, not HTML ones, and
-        # cannot draw Mermaid diagrams.
+        # Docker Hub only completes Markdown image links, not HTML ones, cannot
+        # draw Mermaid, has no heading anchors, and leaves Markdown inside
+        # GitHub alerts unrendered, so those become plain quotes.
         run: |
           sed -e 's#src="docs/#src="https://raw.githubusercontent.com/${{ github.repository }}/main/docs/#g' \
               -e 's#href="LICENSE"#href="https://github.com/${{ github.repository }}/blob/main/LICENSE"#g' \
-              -e '/^```mermaid$/,/^```$/d' README.md > "$RUNNER_TEMP/README.dockerhub.md"
+              -e '/^```mermaid$/,/^```$/d' \
+              -e '/href="#-/d' \
+              -e 's/^> \[!TIP\]$/> 💡 **Tip**\n>/' \
+              -e 's/^> \[!NOTE\]$/> ℹ️ **Note**\n>/' \
+              -e 's/^> \[!WARNING\]$/> ⚠️ **Warning**\n>/' \
+              -e 's/^> \[!CAUTION\]$/> 🛑 **Caution**\n>/' \
+              README.md > "$RUNNER_TEMP/README.dockerhub.md"
       - name: Docker Hub description from the README
         if: github.ref == 'refs/heads/main'
         uses: peter-evans/dockerhub-description@v5
