@@ -27,6 +27,14 @@ func (s *Server) network(w http.ResponseWriter, r *http.Request) bool {
 	if c := sims.HTTPStatus; c >= 400 && c < 600 {
 		e.warn("simulated outage: HTTP %d", c)
 		http.Error(w, fmt.Sprintf("%d %s (simulated by mock-idp)", c, http.StatusText(c)), c)
+		// An outage never lets a flow complete, so this failed request is the one shot.
+		if sims.Once {
+			s.store.mu.Lock()
+			if t := s.store.tenant(r.PathValue("tenant")); t != nil {
+				s.consumeOnce(t)
+			}
+			s.store.mu.Unlock()
+		}
 		return true
 	}
 	return false

@@ -111,6 +111,22 @@ func TestSAMLAndOIDCThroughBuiltInApps(t *testing.T) {
 	}
 }
 
+// An outage never lets a flow complete, so once has to clear it on the failed request itself.
+func TestOnceClearsOutage(t *testing.T) {
+	_, ts := newTestServer(t)
+	call(t, ts, "PATCH", "/api/tenants/okta/simulations", map[string]any{"httpStatus": 503, "once": true})
+	for i, want := range []int{503, 200} {
+		resp, err := http.Get(ts.URL + "/t/okta/.well-known/openid-configuration")
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != want {
+			t.Errorf("request %d: status %d, want %d", i+1, resp.StatusCode, want)
+		}
+	}
+}
+
 func TestCatalogMatchesSimulations(t *testing.T) {
 	var tags []string
 	ty := reflect.TypeOf(Simulations{})

@@ -73,7 +73,7 @@ var simCatalog = []simInfo{
 	sim("latencyMs", "Network", "int", "Latency (ms)", "Delay every IdP endpoint: authorize, token, SAML, metadata, JWKS."),
 	sim("httpStatus", "Network", "int", "Outage status", "Answer every IdP endpoint with this HTTP status, e.g. 500 or 503. 0 is off."),
 	sim("clockSkewSec", "Network", "int", "Clock skew (s)", "Shift every timestamp the IdP issues. Positive means the IdP clock runs ahead."),
-	sim("once", "Behaviour", "bool", "One shot", "Clear every fault after the next completed sign-in or token call. Good for tests."),
+	sim("once", "Behaviour", "bool", "One shot", "Clear every fault after the next completed sign-in or token call, or after the first request an outage fails. Good for tests."),
 	sim("autoLogin", "Login flow", "user", "Auto sign-in as", "Skip the login page and sign in as this user. Best for automated tests."),
 	sim("pauseBeforeSend", "Login flow", "bool", "Pause before send", "Show what is about to go to the app, decoded, and wait for a click."),
 	sim("anyPassword", "Login flow", "bool", "Accept any password", "Any password works for any active user."),

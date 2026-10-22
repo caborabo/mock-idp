@@ -178,7 +178,7 @@ flowchart LR
 | Key | What it does |
 |---|---|
 | `autoLogin` | Skip the login page and sign in as this user. Best for automated tests |
-| `once` | Clear every fault after the next completed sign-in |
+| `once` | Clear every fault after the next completed sign-in (with `httpStatus`, after the first request it fails) |
 | `requireMfa` · `showConsent` | Add an MFA step or an OIDC consent screen |
 | `lockedOut` · `authError` | Refuse the sign-in |
 | `anyPassword` | Accept any password |
