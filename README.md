@@ -92,18 +92,20 @@ Everything the dashboard does is a JSON API call, and every call is also an MCP 
 ```mermaid
 flowchart LR
   subgraph you[" "]
-    app["Your app<br/>(SP / RP)"]
+    app["Your app<br/>(SP / RP / Directory client)"]
     scim["Your SCIM server"]
     agent["AI agent / CI"]
   end
   subgraph mock["mock-idp :7070"]
     idp["SAML IdP · OIDC provider<br/>9 providers, their quirks"]
+    dir["SCIM 2.0 & Directory APIs<br/>Okta, Graph, Google, Auth0, Keycloak"]
     sims["40 faults"]
     push["SCIM client<br/>Okta / Entra dialects"]
     logs["Live logs"]
     api["/api · /mcp"]
   end
   app <-- "SSO, SLO, tokens" --> idp
+  app <-- "SCIM 2.0, Okta, Graph" --> dir
   push -- "provision users & groups" --> scim
   agent -- "set up, inject, read" --> api
   sims -.-> idp
@@ -115,7 +117,8 @@ flowchart LR
 - **Encrypted assertions.** AES-128/256 in CBC or GCM, RSA-OAEP or RSA 1.5 key transport, signed then encrypted. Paste the SP's certificate or its whole metadata.
 - **Signed AuthnRequests.** Verified in both bindings against the SP's signing certificate. Optionally required, and advertised in the metadata.
 - **OIDC provider.** Discovery, JWKS, authorization code + PKCE, implicit, refresh tokens, client credentials, password grant, userinfo, logout.
-- **SCIM client.** Provisions users and groups into *your* app as Okta or Entra would. Auto-push on change, full sync, and a conformance suite.
+- **SCIM 2.0 server & client.** Pull or provision users and groups at `/t/{tenant}/scim/v2` (with RFC 7644 filtering, PATCH, ETags, and Enterprise User extension), or push SCIM from mock-idp into *your* app as Okta or Entra would.
+- **Vendor directory & audit log APIs.** Native REST APIs for Okta (`/api/v1/users`, `/groups`, `/apps`, `/logs` with `SSWS` and `Link` cursor pagination), Microsoft Graph (`/v1.0/me`, `/users`, `/groups`, `/memberOf`, `/getMemberGroups`, `/auditLogs/signIns` with OData `$filter`/`$select`/`@odata.nextLink`), Google Workspace Admin SDK (`/admin/directory/v1/users`, `/groups`, `/admin/reports/v1/activity/...`), Auth0 Management API (`/api/v2/users`, `/roles`, `/organizations`, `/logs`), and Keycloak Admin REST API (`/admin/realms/{realm}/users`, `/groups`, `/events`).
 - **Built-in test SP and RP.** A careful app that signs in through the real flow and shows every check.
 - **Live logs, API, MCP.** See below.
 
@@ -209,6 +212,24 @@ Get a signed SAMLResponse without a browser:
 
 ```bash
 curl -X POST localhost:7070/api/tenants/okta/apps/test-saml/saml-response -d '{"user":"alice@acme.example"}'
+```
+
+Pull users via SCIM 2.0:
+
+```bash
+curl "http://localhost:7070/t/okta/scim/v2/Users?filter=userName%20eq%20%22alice@acme.example%22"
+```
+
+Pull users via Okta `/api/v1/users`:
+
+```bash
+curl -H "Authorization: SSWS mock-api-token" http://localhost:7070/t/okta/api/v1/users
+```
+
+Pull users via Microsoft Graph `/v1.0/users`:
+
+```bash
+curl http://localhost:7070/t/entra/v1.0/users
 ```
 
 Register your SCIM server, then run the conformance suite against it as Entra:

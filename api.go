@@ -430,9 +430,71 @@ func (s *Server) endpoints(t *Tenant) map[string]any {
 		}
 		apps = append(apps, m)
 	}
+	var dirApi map[string]string
+	switch strings.ToLower(t.Provider) {
+	case "okta":
+		dirApi = map[string]string{
+			"type":    "okta",
+			"baseUrl": iss + "/api/v1",
+			"users":   iss + "/api/v1/users",
+			"groups":  iss + "/api/v1/groups",
+			"apps":    iss + "/api/v1/apps",
+			"logs":    iss + "/api/v1/logs",
+		}
+	case "entra":
+		dirApi = map[string]string{
+			"type":              "ms-graph",
+			"baseUrl":           iss + "/v1.0",
+			"users":             iss + "/v1.0/users",
+			"groups":            iss + "/v1.0/groups",
+			"servicePrincipals": iss + "/v1.0/servicePrincipals",
+			"signInLogs":        iss + "/v1.0/auditLogs/signIns",
+		}
+	case "google":
+		dirApi = map[string]string{
+			"type":          "google-admin",
+			"baseUrl":       iss + "/admin/directory/v1",
+			"users":         iss + "/admin/directory/v1/users",
+			"groups":        iss + "/admin/directory/v1/groups",
+			"loginActivity": iss + "/admin/reports/v1/activity/users/all/applications/login",
+		}
+	case "auth0":
+		dirApi = map[string]string{
+			"type":          "auth0",
+			"baseUrl":       iss + "/api/v2",
+			"users":         iss + "/api/v2/users",
+			"roles":         iss + "/api/v2/roles",
+			"organizations": iss + "/api/v2/organizations",
+			"logs":          iss + "/api/v2/logs",
+		}
+	case "keycloak":
+		dirApi = map[string]string{
+			"type":    "keycloak",
+			"baseUrl": iss + "/admin/realms/" + t.ID,
+			"users":   iss + "/admin/realms/" + t.ID + "/users",
+			"groups":  iss + "/admin/realms/" + t.ID + "/groups",
+			"events":  iss + "/admin/realms/" + t.ID + "/events",
+		}
+	default:
+		dirApi = map[string]string{
+			"type":    "scim",
+			"baseUrl": iss + "/scim/v2",
+			"users":   iss + "/scim/v2/Users",
+			"groups":  iss + "/scim/v2/Groups",
+		}
+	}
 	return map[string]any{
 		"oidc": map[string]string{"issuer": iss, "discovery": iss + "/.well-known/openid-configuration", "authorize": iss + "/authorize",
 			"token": iss + "/token", "userinfo": iss + "/userinfo", "jwks": iss + "/jwks", "logout": iss + "/logout"},
+		"scim": map[string]string{
+			"baseUrl":               iss + "/scim/v2",
+			"serviceProviderConfig": iss + "/scim/v2/ServiceProviderConfig",
+			"resourceTypes":         iss + "/scim/v2/ResourceTypes",
+			"schemas":               iss + "/scim/v2/Schemas",
+			"users":                 iss + "/scim/v2/Users",
+			"groups":                iss + "/scim/v2/Groups",
+		},
+		"directoryApi":      dirApi,
 		"apps":              apps,
 		"certificatePem":    t.CertPEM,
 		"certificateUrl":    iss + "/cert.pem",

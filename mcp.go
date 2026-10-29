@@ -159,6 +159,19 @@ func (s *Server) llmsTxt(w http.ResponseWriter, r *http.Request) {
 		b.WriteString("\n")
 	}
 	b.WriteString("\n## IdP endpoints (per tenant)\n\n- OIDC: /t/{tenant}/.well-known/openid-configuration, /authorize, /token, /userinfo, /jwks, /logout\n- SAML: /t/{tenant}/saml/{app}/metadata, /sso (Redirect and POST), /init (IdP-initiated), /slo\n- Built-in test SP: /sp/saml/{tenant}/{app}/login, test RP: /sp/oidc/{tenant}/{app}/login\n")
+	b.WriteString("\n## SCIM 2.0 Inbound Server (per tenant)\n\n" +
+		"- ServiceProviderConfig: GET /t/{tenant}/scim/v2/ServiceProviderConfig\n" +
+		"- ResourceTypes: GET /t/{tenant}/scim/v2/ResourceTypes\n" +
+		"- Schemas: GET /t/{tenant}/scim/v2/Schemas\n" +
+		"- Users: GET, POST /t/{tenant}/scim/v2/Users, GET, PUT, PATCH, DELETE /t/{tenant}/scim/v2/Users/{id}\n" +
+		"- Groups: GET, POST /t/{tenant}/scim/v2/Groups, GET, PUT, PATCH, DELETE /t/{tenant}/scim/v2/Groups/{id}\n" +
+		"- Supports RFC 7644 filtering (eq, co, sw, pr, and, or, not), pagination (startIndex, count), ETags, and Enterprise User extension.\n")
+	b.WriteString("\n## Vendor Directory & Audit Log APIs (per tenant)\n\n" +
+		"- Okta REST API: /t/{tenant}/api/v1/users, /t/{tenant}/api/v1/groups, /t/{tenant}/api/v1/apps, /t/{tenant}/api/v1/logs (Authorization: SSWS <token> or Bearer, Link cursor pagination)\n" +
+		"- Microsoft Graph API: /t/{tenant}/v1.0/organization, /t/{tenant}/v1.0/me, /t/{tenant}/v1.0/users, /t/{tenant}/v1.0/groups, /t/{tenant}/v1.0/auditLogs/signIns (OData $filter, $select, @odata.nextLink, /getMemberObjects)\n" +
+		"- Google Workspace Admin SDK: /t/{tenant}/admin/directory/v1/users, /t/{tenant}/admin/directory/v1/groups, /t/{tenant}/admin/directory/v1/groups/{groupKey}/members; /t/{tenant}/admin/reports/v1/activity/users/{userKey}/applications/{applicationName}\n" +
+		"- Auth0 Management API: /t/{tenant}/api/v2/users, /t/{tenant}/api/v2/roles, /t/{tenant}/api/v2/organizations, /t/{tenant}/api/v2/logs\n" +
+		"- Keycloak Admin REST API: /t/{tenant}/admin/realms/{realm}/users, /t/{tenant}/admin/realms/{realm}/groups, /t/{tenant}/admin/realms/{realm}/events, /t/{tenant}/admin/realms/{realm}/admin-events\n")
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Write([]byte(b.String()))
 }

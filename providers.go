@@ -71,6 +71,7 @@ var providerList = []*Provider{
 			"The groups claim appears only when the app asks for it.",
 			"SAML issuer is http://www.okta.com/<key>, different for every app.",
 			"SCIM updates are a PUT of the whole user. Deprovisioning only deactivates (active=false); Okta never DELETEs users.",
+			"Inbound SCIM 2.0 server at /t/{tenant}/scim/v2 and Okta REST API at /api/v1/* (users, groups, apps, logs) with SSWS authorization and Link cursor pagination.",
 		},
 	},
 	{
@@ -90,6 +91,7 @@ var providerList = []*Provider{
 			"groups are object ids (GUIDs), not names.",
 			"SAML issuer is https://sts.windows.net/<tenant id>/ and only the assertion is signed.",
 			`SCIM PATCH ops are Title case ("Replace") and booleans are strings ("False"). It probes with a random userName filter first.`,
+			"Inbound SCIM 2.0 server at /t/{tenant}/scim/v2 and Microsoft Graph API at /v1.0/* (users, groups, memberOf, /getMemberObjects, signInLogs) with OData $filter, $select, and @odata.nextLink pagination.",
 		},
 	},
 	{
@@ -102,6 +104,7 @@ var providerList = []*Provider{
 			"hd names the Workspace domain. Check it if only one company may sign in.",
 			"SAML sends no attributes until an admin maps them: only the NameID (primary email).",
 			"Google pushes SCIM only to catalogue apps. The SCIM flavor here is generic.",
+			"Inbound SCIM 2.0 server at /t/{tenant}/scim/v2 and Google Workspace Admin Directory API at /admin/directory/v1/* (users, groups, members) plus Reports API at /admin/reports/v1/activity/*.",
 		},
 	},
 	{
@@ -148,7 +151,11 @@ var providerList = []*Provider{
 		},
 		AttrNameFormat: attrURI, SignAssertion: true,
 		Scim:   genericScim,
-		Quirks: []string{"sub is connection|id, e.g. auth0|64f…", "Issuer is urn:<tenant>.auth0.com."},
+		Quirks: []string{
+			"sub is connection|id, e.g. auth0|64f…",
+			"Issuer is urn:<tenant>.auth0.com.",
+			"Inbound SCIM 2.0 server at /t/{tenant}/scim/v2 and Auth0 Management API at /api/v2/* (users, roles, organizations, logs) with Bearer token authentication.",
+		},
 	},
 	{
 		Key: "keycloak", Name: "Keycloak", Color: "#4d4d4d", IDStyle: "uuid",
@@ -156,7 +163,12 @@ var providerList = []*Provider{
 		SAMLAttrs:      []AttrMapping{{"email", "email"}, {"firstName", "givenName"}, {"lastName", "familyName"}, {"Role", "groups"}},
 		AttrNameFormat: attrBasic, SignResponse: true, SignAssertion: true,
 		Scim:   genericScim,
-		Quirks: []string{"Groups in tokens are paths like /Engineering.", "preferred_username is always sent.", "Issuer is <base>/realms/<realm>."},
+		Quirks: []string{
+			"Groups in tokens are paths like /Engineering.",
+			"preferred_username is always sent.",
+			"Issuer is <base>/realms/<realm>.",
+			"Inbound SCIM 2.0 server at /t/{tenant}/scim/v2 and Keycloak Admin REST API at /admin/realms/{realm}/* (users, count, groups, members, events) with Bearer token authentication.",
+		},
 	},
 	{
 		Key: "generic", Name: "Generic SAML / OIDC", Color: "#6b7280", IDStyle: "uuid",
